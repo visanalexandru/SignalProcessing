@@ -19,12 +19,12 @@ def filter_freqs(Y, ratio, width, height):
 
 if __name__ == "__main__":
     fig, axs = plt.subplots(5,2, figsize=(10,10))
-    fig.tight_layout(h_pad=2)
+    fig.tight_layout(pad=3)
 
     # Loading the racoon image.
     X = misc.face(gray=True)
     height ,width = X.shape 
-    axs[0,0].set_title("Original image")
+    axs[0,0].set_title(f"Original image, SNR = {snr(X)}")
     axs[0,0].imshow(X, cmap=plt.cm.gray)
 
     # Computing the fft2d of the original image.
