@@ -5,8 +5,8 @@ import numpy as np
 import ex2
 
 if __name__ == "__main__":
-    fig, axs = plt.subplots(6,2, figsize=(10,10))
-    fig.tight_layout(h_pad=2)
+    fig, axs = plt.subplots(6,2, figsize=(12,12))
+    fig.tight_layout(pad=3)
 
     # Loading the racoon image.
     X = misc.face(gray=True)
