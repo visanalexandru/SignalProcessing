@@ -39,8 +39,7 @@ def fit_ar(dataset, p):
         for x in range(p):
             Y[y,x] = dataset[p+y-x-1] 
     y = dataset[p:].T
-    coeffs = np.matmul(np.linalg.pinv(np.matmul(Y.T, Y)),Y.T)
-    coeffs = np.matmul(coeffs, y) 
+    coeffs = np.matmul(np.linalg.pinv(Y), y) 
     return coeffs 
 
 # Predicts the next value in the dataset using an ar model.
