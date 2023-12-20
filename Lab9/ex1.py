@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-np.random.seed(7773)
+# np.random.seed(71173)
 
 # Generate a random time series that is the sum of three components: Trend, Season, Noise
 def generate_time_series(N):
@@ -25,37 +25,37 @@ def test_exponential_smoothing(series, alpha):
     s = exponential_smoothing(series, alpha) 
     error = 0
     cnt = 0
-    for x in range(2, len(series)):
+    for x in range(1, len(series)):
         error += (series[x] - s[x-1])**2
         cnt+=1
     return error / cnt
 
+# Find the best alpha.
+def optimise_exponential_smoothing(series):
+    alpha_values = np.linspace(0.2, 1, 100)
+
+    # Finding a good alpha.
+    errors = []
+    errors_alpha = []
+
+    for alpha in alpha_values:
+        error = test_exponential_smoothing(series, alpha)
+        errors.append(error)
+        errors_alpha.append(alpha)
+
+    min_error = np.argmin(errors)
+    best_alpha = errors_alpha[min_error]
+
+    fig, axs = plt.subplots(1, figsize=(10,10))
+    fig.suptitle("Optimising the alpha value")
+    axs.plot(errors_alpha, errors)
+    axs.stem(best_alpha, errors[min_error])
+    return best_alpha
+
+
 def compute_moving_average(series, q):
     mean = np.mean(series)
     m = len(series) - q + 1
-    Y = np.zeros((m, q+1)) 
-    noise = np.random.normal(size=len(series))
-    print(noise)
-
-    # y[3] = noise[3] + a1*noise[2] + a2*noise[1] + a3*noise[0] + m 
-    # ...
-    # y[9] = noise[9] + a1 * noise[8] + a2*noise[7] + a3*noise[6] + m
-    # y[10] = noise[10] + a1 * noise[9] + a2*noise[8] + a3*noise[7] + m
-
-    # y = Yx 
-    # Y = [[noise[3], noise[2], noise[1], noise[0], m]
-    #     [[noise[4],  noise[3], noise[2], noise[1], m]
-    #     ...
-    #     [[noise[10],  noise[9], noise[8], noise[7], m]
-
-    # x = [1, a1, a2, a3, 1]
-
-    for line in range(m):
-        for column in range(q):
-            Y[line, column] = noise[line+q-column-1] 
-        Y[line, column+1] = mean 
-
-    print(Y)
 
 
 t , trend, seasonal, noise = generate_time_series(4000) 
@@ -74,32 +74,22 @@ axs[2].set_title("Seasonal")
 axs[3].plot(t, noise)
 axs[3].set_title("Noise")
 
-# Plotting the time series passed through exponential decay.
-fig, axs = plt.subplots(1, figsize=(10,10))
-exp_decay = exponential_smoothing(y[:200], 0.4)
-axs.plot(t[:200], exp_decay)
-axs.plot(t[:200], y[:200])
 
-# Finding a good alpha.
-alpha_values = np.linspace(0.2, 1, 100)
+# Finding the best parameter for exponential smoothing.
+best_alpha = optimise_exponential_smoothing(y)
+print(f"The best alpha is: {best_alpha}")
 
-errors = []
-errors_alpha = []
+# Plotting the time series passed through exponential smoothing.
+fig, axs = plt.subplots(2, figsize=(10,10))
+exp_default= exponential_smoothing(y[:200], 0.8)
+exp_best= exponential_smoothing(y[:200], best_alpha)
 
-for alpha in alpha_values:
-    error = test_exponential_smoothing(y, alpha)
-    errors.append(error)
-    errors_alpha.append(alpha)
+axs[0].set_title("Exponential smoothing using alpha = 0.8")
+axs[1].set_title(f"Exponential smoothing using alpha = {best_alpha}")
+axs[0].plot(t[:200], exp_default, label="smooth")
+axs[0].plot(t[:200], y[:200], label="original")
+axs[1].plot(t[:200], exp_best, label="smooth")
+axs[1].plot(t[:200], y[:200], label="original")
+fig.legend()
 
-min_error = np.argmin(errors)
-best_alpha = errors_alpha[min_error]
-
-fig, axs = plt.subplots(1, figsize=(10,10))
-axs.plot(errors_alpha, errors)
-axs.stem(best_alpha, errors[min_error])
 plt.show()
-
-
-# Computing the moving average model.
-
-compute_moving_average([1,2,3,4, 5, 6, 7],3)
