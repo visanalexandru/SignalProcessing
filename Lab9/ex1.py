@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
-# np.random.seed(71173)
+np.random.seed(71173)
 
 # Generate a random time series that is the sum of three components: Trend, Season, Noise
 def generate_time_series(N):
@@ -53,10 +54,42 @@ def optimise_exponential_smoothing(series):
     return best_alpha
 
 
-def compute_moving_average(series, q):
+def compute_moving_average(series, q, noise):
     mean = np.mean(series)
-    m = len(series) - q + 1
+    # Example for p = 4
+    # y[4] = e4 + a1*e3 + a2*e2 + a3*e1 + a4*e0 + mean
+    # y[5] = e5 + a1*e4 + a2*e3 + a3*e2 + a4*e1 + mean
+    # y[6] = e6 + a1*e5 + a2*e4 + a3*e3 + a4*e2 + mean
+    # ...
+    # We can translate this to: 
+    # y[4] - e4 - mean = a1*e3 + a2*e2 + a3*e1 + a4*e0
+    # y[5] - e5 - mean = a1*e4 + a2*e3 + a3*e2 + a4*e1
+    # y[6] - e6 - mean = a1*e5 + a2*e4 + a3*e3 + a4*e2
+    # ...
 
+    num_lines = len(series) - q 
+    Y = np.zeros((num_lines, q))
+    x = np.zeros(num_lines)
+
+    for line in range(num_lines):
+        for column in range(q):
+            Y[line, column] = noise[q + line -1 - column]
+        
+        x[line] = series[q + line] - noise[q+line] - mean 
+    
+    # We must solve: x = Y * a to get our coefficients.
+
+    return np.matmul(np.linalg.pinv(Y), x) 
+
+# Use the ma model to make predictions.
+def predict_moving_average(mean, noise, ma):
+    q = len(ma)
+    result = []
+    for x in range(q, len(noise)):
+        last = noise[x-q:x]
+        value = np.convolve(last, ma, mode="valid") + mean + noise[x]
+        result.append(value)
+    return np.array(result)
 
 t , trend, seasonal, noise = generate_time_series(4000) 
 y = trend+seasonal+noise
@@ -92,4 +125,21 @@ axs[1].plot(t[:200], exp_best, label="smooth")
 axs[1].plot(t[:200], y[:200], label="original")
 fig.legend()
 
+
+
+# Computing the MA model.
+noise = np.random.normal(size=len(y))
+q = 800 
+train_size = 2000
+train_y = y[:train_size]
+train_noise = noise[:train_size]
+test_noise = noise[train_size:]
+mean = np.mean(train_y)
+
+ma = compute_moving_average(train_y, q, train_noise) 
+result = predict_moving_average(mean, test_noise, ma)
+
+fig, axs = plt.subplots(2, figsize=(10,10))
+axs[0].plot(t[train_size+q:], y[train_size+q:])
+axs[1].plot(t[train_size+q:], result)
 plt.show()
