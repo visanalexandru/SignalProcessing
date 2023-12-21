@@ -81,6 +81,27 @@ def compute_moving_average(series, q, noise):
 
     return np.matmul(np.linalg.pinv(Y), x) 
 
+def compute_arma(series, noise, p, q):
+    # Example for p = 4 and q = 4
+    # y[4] = e[4] + x1*y[3] + x2*y[2] + x3*y[1] + x4*y[0] 
+    #             + a1*e[3] + a2*e[2] + a3*e[1] + a4*e[0]
+    start = max(p,q)
+    lines = len(series) - start 
+
+    Y = np.zeros((lines,p+q))
+    x = np.zeros(lines).T
+
+    for line in range(lines):
+        for column in range(0, p):
+            Y[line, column] = series[start+line-1-column] 
+
+        for column in range(p, p+q):
+            Y[line, column] = noise[start+line-1-(column-p)] 
+
+        x[line] = series[start+line]
+
+    return (np.matmul(np.linalg.pinv(Y), x), p, q)
+
 # Use the ma model to make predictions.
 def predict_moving_average(mean, noise, ma):
     q = len(ma)
@@ -90,6 +111,21 @@ def predict_moving_average(mean, noise, ma):
         value = np.convolve(last, ma, mode="valid") + mean + noise[x]
         result.append(value)
     return np.array(result)
+
+def predict_arma(model, series, noise):
+    arma, p, q = model 
+    window_size = max(p, q)
+    result = []
+
+    for x in range(window_size, len(noise)):
+        noise_window = noise[x-q: x]
+        series_window = series[x-p: x]
+        window = np.concatenate((noise_window, series_window)) 
+        predict = np.convolve(window, arma , mode="valid")
+        result.append(predict)
+        series = np.append(series, predict)
+
+    return result
 
 t , trend, seasonal, noise = generate_time_series(4000) 
 y = trend+seasonal+noise
@@ -126,20 +162,34 @@ axs[1].plot(t[:200], y[:200], label="original")
 fig.legend()
 
 
+# Computing the train-test split
+noise = np.random.normal(size=len(y))
+train_size = 3300
+train_y = y[:train_size]
+test_y = y[train_size:]
 
 # Computing the MA model.
-noise = np.random.normal(size=len(y))
-q = 800 
-train_size = 2000
-train_y = y[:train_size]
-train_noise = noise[:train_size]
-test_noise = noise[train_size:]
+q = 400 
 mean = np.mean(train_y)
-
-ma = compute_moving_average(train_y, q, train_noise) 
-result = predict_moving_average(mean, test_noise, ma)
+ma = compute_moving_average(train_y, q, noise) 
+result = predict_moving_average(mean, noise[train_size-q:], ma)
 
 fig, axs = plt.subplots(2, figsize=(10,10))
-axs[0].plot(t[train_size+q:], y[train_size+q:])
-axs[1].plot(t[train_size+q:], result)
+axs[0].set_title("Test set")
+axs[0].plot(t[train_size:], test_y)
+axs[1].set_title("MA for the test set")
+axs[1].plot(t[train_size:], result)
+
+# Computing an ARMA model.
+p = 200
+q = 100
+window_size = max(p,q)
+arma = compute_arma(train_y, noise, p, q)
+predictions = predict_arma(arma, train_y[-window_size:], noise[train_size-window_size:] )
+
+fig, axs = plt.subplots(1, figsize=(10,10))
+axs.plot(t[:train_size], y[:train_size])
+axs.plot(t[train_size:], predictions, label="predictions")
+axs.plot(t[train_size:], test_y, label="truths")
+plt.legend()
 plt.show()
