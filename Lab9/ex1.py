@@ -127,6 +127,15 @@ def predict_arma(model, series, noise):
 
     return result
 
+# Compute the arma model mse for the given p and q. 
+def get_arma_error(p, q, y, noise, train_size):
+    train_y = y[:train_size]
+    test_y = y[train_size:]
+    window_size = max(p,q)
+    arma = compute_arma(train_y, noise, p, q)
+    predictions = predict_arma(arma, train_y[-window_size:], noise[train_size-window_size:] )
+    return np.mean((predictions-test_y)**2)
+
 t , trend, seasonal, noise = generate_time_series(4000) 
 y = trend+seasonal+noise
 
@@ -154,7 +163,7 @@ exp_default= exponential_smoothing(y[:200], 0.8)
 exp_best= exponential_smoothing(y[:200], best_alpha)
 
 axs[0].set_title("Exponential smoothing using alpha = 0.8")
-axs[1].set_title(f"Exponential smoothing using alpha = {best_alpha}")
+axs[1].set_title(f"Exponential smoothing using alpha = {best_alpha} (best)")
 axs[0].plot(t[:200], exp_default, label="smooth")
 axs[0].plot(t[:200], y[:200], label="original")
 axs[1].plot(t[:200], exp_best, label="smooth")
@@ -164,7 +173,7 @@ fig.legend()
 
 # Computing the train-test split
 noise = np.random.normal(size=len(y))
-train_size = 3300
+train_size = 3000
 train_y = y[:train_size]
 test_y = y[train_size:]
 
@@ -175,6 +184,7 @@ ma = compute_moving_average(train_y, q, noise)
 result = predict_moving_average(mean, noise[train_size-q:], ma)
 
 fig, axs = plt.subplots(2, figsize=(10,10))
+fig.suptitle(f"MA q={q}")
 axs[0].set_title("Test set")
 axs[0].plot(t[train_size:], test_y)
 axs[1].set_title("MA for the test set")
@@ -188,8 +198,25 @@ arma = compute_arma(train_y, noise, p, q)
 predictions = predict_arma(arma, train_y[-window_size:], noise[train_size-window_size:] )
 
 fig, axs = plt.subplots(1, figsize=(10,10))
+fig.suptitle(f"ARMA p={p}, q={q}")
 axs.plot(t[:train_size], y[:train_size])
 axs.plot(t[train_size:], predictions, label="predictions")
 axs.plot(t[train_size:], test_y, label="truths")
 plt.legend()
 plt.show()
+
+# Finding the best p and q
+p_values = [10, 20, 40, 80, 160, 320]
+q_values = [10, 20, 40, 80, 160, 320]
+best = None
+min_error = np.inf
+
+for p in p_values:
+    for q in q_values:
+        error = get_arma_error(p, q, y, noise, 3000)
+        print(f"Arma error for p={p}, q={q} is {error}")
+        if error<min_error:
+            min_error = error
+            best = (p,q)
+
+print(f"The best: p={best[0]}, q={best[1]}")
