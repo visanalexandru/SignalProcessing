@@ -20,8 +20,14 @@ Q_MATRIX = np.array(
 )
 
 
+# RGB -> YCrCb
 def to_YCrCb(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+
+
+# YCrCb -> RGB
+def from_YCrCb(image):
+    return cv2.cvtColor(image, cv2.COLOR_YCrCb2RGB)
 
 
 # Applies dct and then coefficient quantization over a 8*8 block.
@@ -68,6 +74,7 @@ def dequantize_block(block):
     block = block.astype(np.int32) * Q_MATRIX * 8
     block = np.round(idctn(block, orthogonalize=True))
     block += 128
+    block = np.clip(block, 0, 255)
     block = block.astype(np.uint8)
     return block
 
@@ -101,7 +108,17 @@ class CompressedGrayscaleImage:
 
 
 class CompressedRGBImage:
-    pass
+    def __init__(self, compressed_chan1, compressed_chan2, compressed_chan3):
+        self.compressed_chan1 = compressed_chan1
+        self.compressed_chan2 = compressed_chan2
+        self.compressed_chan3 = compressed_chan3
+
+    def size(self):
+        return (
+            self.compressed_chan1.size()
+            + self.compressed_chan2.size()
+            + self.compressed_chan3.size()
+        )
 
 
 # Compresses a grayscale image using the JPEG algorithm.
@@ -134,7 +151,7 @@ def compress_grayscale(image):
 
 def decompress_grayscale(image):
     assert type(image) == CompressedGrayscaleImage
-    decompressed = np.zeros((image.padded_height, image.padded_width))
+    decompressed = np.zeros((image.padded_height, image.padded_width), dtype=np.uint8)
     current_block = 0
 
     for y in range(0, image.padded_height, BLOCK_SIZE):
@@ -147,20 +164,43 @@ def decompress_grayscale(image):
     return decompressed[: image.height, : image.width]
 
 
+def compress_rgb(image):
+    assert type(image) == np.ndarray
+    assert len(image.shape) == 3
+    assert image.shape[2] == 3
+
+    image = to_YCrCb(image)
+    c1, c2, c3 = image[:, :, 0], image[:, :, 1], image[:, :, 2]
+
+    compressed_chan1 = compress_grayscale(c1)
+    compressed_chan2 = compress_grayscale(c2)
+    compressed_chan3 = compress_grayscale(c3)
+
+    return CompressedRGBImage(compressed_chan1, compressed_chan2, compressed_chan3)
+
+
+def decompress_rgb(image):
+    assert type(image) == CompressedRGBImage
+
+    c1 = decompress_grayscale(image.compressed_chan1)
+    c2 = decompress_grayscale(image.compressed_chan2)
+    c3 = decompress_grayscale(image.compressed_chan3)
+
+    image = np.stack((c1, c2, c3), axis=-1)
+
+    return from_YCrCb(image)
+
+
 image = misc.face()
-image = to_YCrCb(image)
-
-channel1 = image[:, :, 0]
-print(f"The size of the uncompressed image: {len(channel1.tobytes())}")
-compressed = compress_grayscale(channel1)
+print(f"The size of the uncompressed image: {len(image.tobytes())}")
+compressed = compress_rgb(image)
 print(f"The size of the compressed image: {compressed.size()}")
-decompressed = decompress_grayscale(compressed)
 
+decompressed = decompress_rgb(compressed)
 
 fig, axes = plt.subplots(1, 2)
-axes[0].imshow(channel1)
+axes[0].imshow(image)
 axes[1].imshow(decompressed)
 plt.show()
 
-print(decompressed.shape)
-print(((channel1 - decompressed) ** 2).mean())
+print("MSE: ", ((image - decompressed) ** 2).mean())
