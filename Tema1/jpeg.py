@@ -29,13 +29,20 @@ def to_YCrCb(image):
 def quantize_block(block, debug=False):
     assert type(block) == np.ndarray
     assert block.shape == (8, 8)
+    assert block.dtype == np.uint8
 
-    y = dctn(block)
+    # Shift the values from [0, 255] to [-128, 127]
+    shifted_block = block.astype(np.int32)
+    shifted_block -= 128
+
+    # Take the two-dimensional DCT
+    y = dctn(shifted_block, orthogonalize=True) / 8
+
     # Coefficient quantization
-    y_q = np.round(y / Q_MATRIX).astype(np.int32)
+    y_q = (y / Q_MATRIX).astype(np.int8)
 
     if debug:
-        block_q = np.round(idctn(y_q * Q_MATRIX))
+        block_q = dequantize_block(y_q)
         # To see the compression result side-by-side:
         fig, axes = plt.subplots(2, 2)
         fig.tight_layout()
@@ -56,12 +63,20 @@ def quantize_block(block, debug=False):
 def dequantize_block(block):
     assert type(block) == np.ndarray
     assert block.shape == (8, 8)
-    return np.round(idctn(block * Q_MATRIX))
+    assert block.dtype == np.int8
+
+    block = block.astype(np.int32) * Q_MATRIX * 8
+    block = np.round(idctn(block, orthogonalize=True))
+    block += 128
+    block = block.astype(np.uint8)
+    return block
 
 
 # Compress a 8*8 block into a byte array.
 def compress_block(block):
     assert block.shape == (8, 8)
+    assert block.dtype == np.int8
+
     data = block.reshape(64).tobytes()
     return zlib.compress(data)
 
@@ -69,7 +84,7 @@ def compress_block(block):
 # Decompresses a byte array into a 8*8 block.
 def decompress_block(data):
     data = zlib.decompress(data)
-    block = np.frombuffer(data, dtype=np.int32).reshape(8, 8)
+    block = np.frombuffer(data, dtype=np.int8).reshape(8, 8)
     return block
 
 
@@ -80,6 +95,13 @@ class CompressedGrayscaleImage:
         self.padded_height = padded_height
         self.padded_width = padded_width
         self.blocks = blocks
+
+    def size(self):
+        return sum(map(lambda k: len(k), self.blocks))
+
+
+class CompressedRGBImage:
+    pass
 
 
 # Compresses a grayscale image using the JPEG algorithm.
@@ -129,7 +151,9 @@ image = misc.face()
 image = to_YCrCb(image)
 
 channel1 = image[:, :, 0]
+print(f"The size of the uncompressed image: {len(channel1.tobytes())}")
 compressed = compress_grayscale(channel1)
+print(f"The size of the compressed image: {compressed.size()}")
 decompressed = decompress_grayscale(compressed)
 
 
