@@ -1,4 +1,3 @@
-from scipy import misc
 from scipy.fft import dctn, idctn
 import matplotlib.pyplot as plt
 import numpy as np
@@ -189,18 +188,3 @@ def decompress_rgb(image):
     image = np.stack((c1, c2, c3), axis=-1)
 
     return from_YCrCb(image)
-
-
-image = misc.face()
-print(f"The size of the uncompressed image: {len(image.tobytes())}")
-compressed = compress_rgb(image)
-print(f"The size of the compressed image: {compressed.size()}")
-
-decompressed = decompress_rgb(compressed)
-
-fig, axes = plt.subplots(1, 2)
-axes[0].imshow(image)
-axes[1].imshow(decompressed)
-plt.show()
-
-print("MSE: ", ((image - decompressed) ** 2).mean())
