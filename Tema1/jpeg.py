@@ -19,6 +19,18 @@ Q_MATRIX = np.array(
 )
 
 
+# Convert a user-specified quality rating to a percentage scaling factor.
+# The input quality factor should be in (0, 100) (from terrible to very good).
+# Idea from:
+# https://github.com/mozilla/mozjpeg/blob/6c9f0897afa1c2738d7222a0a9ab49e8b536a267/jcparam.c#L333
+def quality_scaling(quality):
+    assert type(quality) == int
+    assert 0 < quality < 100
+
+    quality = 100 - quality
+    return quality
+
+
 # RGB -> YCrCb
 def to_YCrCb(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
@@ -31,10 +43,12 @@ def from_YCrCb(image):
 
 # Applies dct and then coefficient quantization over a 8*8 block.
 # Returns a 8*8 block of np.int32.
-def quantize_block(block, debug=False):
+def quantize_block(block, q_matrix, debug=False):
     assert type(block) == np.ndarray
     assert block.shape == (8, 8)
     assert block.dtype == np.uint8
+    assert type(q_matrix) == np.ndarray
+    assert q_matrix.shape == (8, 8)
 
     # Shift the values from [0, 255] to [-128, 127]
     shifted_block = block.astype(np.int32)
@@ -44,10 +58,10 @@ def quantize_block(block, debug=False):
     y = dctn(shifted_block, orthogonalize=True) / 8
 
     # Coefficient quantization
-    y_q = (y / Q_MATRIX).astype(np.int8)
+    y_q = (y / q_matrix).astype(np.int8)
 
     if debug:
-        block_q = dequantize_block(y_q)
+        block_q = dequantize_block(y_q, q_matrix)
         # To see the compression result side-by-side:
         fig, axes = plt.subplots(2, 2)
         fig.tight_layout()
@@ -65,12 +79,14 @@ def quantize_block(block, debug=False):
     return y_q
 
 
-def dequantize_block(block):
+def dequantize_block(block, q_matrix):
     assert type(block) == np.ndarray
     assert block.shape == (8, 8)
     assert block.dtype == np.int8
+    assert type(q_matrix) == np.ndarray
+    assert q_matrix.shape == (8, 8)
 
-    block = block.astype(np.int32) * Q_MATRIX * 8
+    block = block.astype(np.int32) * q_matrix * 8
     block = np.round(idctn(block, orthogonalize=True))
     block += 128
     block = np.clip(block, 0, 255)
@@ -95,7 +111,8 @@ def decompress_block(data):
 
 
 class CompressedGrayscaleImage:
-    def __init__(self, height, width, padded_height, padded_width, blocks):
+    def __init__(self, quality, height, width, padded_height, padded_width, blocks):
+        self.quality = quality
         self.height = height
         self.width = width
         self.padded_height = padded_height
@@ -121,7 +138,7 @@ class CompressedRGBImage:
 
 
 # Compresses a grayscale image using the JPEG algorithm.
-def compress_grayscale(image):
+def compress_grayscale(image, quality=98):
     assert type(image) == np.ndarray
     assert len(image.shape) == 2
 
@@ -137,15 +154,19 @@ def compress_grayscale(image):
     new_height, new_width = image.shape
     blocks = []
 
+    q_matrix = Q_MATRIX * quality_scaling(quality)
+
     for y in range(0, new_height, BLOCK_SIZE):
         for x in range(0, new_width, BLOCK_SIZE):
             block = image[y : y + BLOCK_SIZE, x : x + BLOCK_SIZE]
-            quantized_block = quantize_block(block, debug=False)
+            quantized_block = quantize_block(block, q_matrix, debug=False)
 
             block_data = compress_block(quantized_block)
             blocks.append(block_data)
 
-    return CompressedGrayscaleImage(height, width, new_height, new_width, blocks)
+    return CompressedGrayscaleImage(
+        quality, height, width, new_height, new_width, blocks
+    )
 
 
 def decompress_grayscale(image):
@@ -153,17 +174,19 @@ def decompress_grayscale(image):
     decompressed = np.zeros((image.padded_height, image.padded_width), dtype=np.uint8)
     current_block = 0
 
+    q_matrix = Q_MATRIX * quality_scaling(image.quality)
+
     for y in range(0, image.padded_height, BLOCK_SIZE):
         for x in range(0, image.padded_width, BLOCK_SIZE):
             block_data = image.blocks[current_block]
             quantized_block = decompress_block(block_data)
-            block = dequantize_block(quantized_block)
+            block = dequantize_block(quantized_block, q_matrix)
             decompressed[y : y + BLOCK_SIZE, x : x + BLOCK_SIZE] = block
             current_block += 1
     return decompressed[: image.height, : image.width]
 
 
-def compress_rgb(image):
+def compress_rgb(image, quality=98):
     assert type(image) == np.ndarray
     assert len(image.shape) == 3
     assert image.shape[2] == 3
@@ -171,9 +194,9 @@ def compress_rgb(image):
     image = to_YCrCb(image)
     c1, c2, c3 = image[:, :, 0], image[:, :, 1], image[:, :, 2]
 
-    compressed_chan1 = compress_grayscale(c1)
-    compressed_chan2 = compress_grayscale(c2)
-    compressed_chan3 = compress_grayscale(c3)
+    compressed_chan1 = compress_grayscale(c1, quality)
+    compressed_chan2 = compress_grayscale(c2, quality)
+    compressed_chan3 = compress_grayscale(c3, quality)
 
     return CompressedRGBImage(compressed_chan1, compressed_chan2, compressed_chan3)
 
