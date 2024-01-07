@@ -20,4 +20,5 @@ while current_mse < desired_mse:
     current_quality -= 1
 
 plt.imshow(cv2.cvtColor(decompressed, cv2.COLOR_BGR2RGB))
+plt.title(f"MSE = {current_mse}")
 plt.show()
