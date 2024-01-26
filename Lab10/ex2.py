@@ -36,7 +36,7 @@ def graph_brownian():
 
 def graph_square_exp():
     domain = np.linspace(0,1, 100) 
-    alpha = 0.01
+    alpha = 10 
 
     mean = np.zeros(len(domain))
     covariance = np.zeros((len(domain), len(domain)))
@@ -46,7 +46,7 @@ def graph_square_exp():
             x = domain[a]
             y = domain[b]
 
-            covariance[a][b] = np.exp(-alpha* np.abs(x-y)) 
+            covariance[a][b] = np.exp(-alpha* np.abs(x-y)**2) 
 
     samples = ex1.sample_multivariate_gaussian(mean, covariance)
 
@@ -78,9 +78,30 @@ def graph_symmetrical():
     plt.plot(domain,samples)
     plt.show()
     
+def graph_period():
+    domain = np.linspace(-1,1,100) 
+    alpha =  0.5
+    beta = 0.8
+
+    mean = np.zeros(len(domain))
+    covariance = np.zeros((len(domain), len(domain)))
+
+    for a in range(len(domain)):
+        for b in range(len(domain)):
+            x = domain[a]
+            y = domain[b]
+
+            covariance[a,b] = np.exp(-alpha* (np.sin(beta*np.pi*(x-y))**2))
+
+    samples = ex1.sample_multivariate_gaussian(mean, covariance)
+
+    plt.title("Period")
+    plt.plot(domain,samples)
+    plt.show()
 
 
 graph_line()
 graph_brownian()
 graph_square_exp()
 graph_symmetrical()
+graph_period()
